@@ -1,0 +1,13 @@
+import jwt from 'jsonwebtoken';
+
+export default function generateToken(user) {
+  return jwt.sign(
+    {
+      id: user.id,
+      role: user.role,
+      email: user.email,
+    },
+    process.env.JWT_SECRET || 'school-bus-secret',
+    { expiresIn: '7d' }
+  );
+}
