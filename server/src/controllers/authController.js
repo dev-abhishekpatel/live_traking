@@ -6,26 +6,31 @@ const users = [
     id: 'u-1001',
     name: 'Admin User',
     email: 'admin@schoolbus.com',
-    password: '$2a$10$7Y4eQ2KOqB4PkM7R9P1yZe8gO2jleFvGX7Q3Qw4C5n7v7xjhf7Rhu',
-    role: 'admin'
+    password: '$2a$10$QnTmjiKcDlBOc6o/iAxC/.84b.Wb7glqH/Kza8Y8T7iSNpUuKBHjm',
+    role: 'admin',
   },
   {
     id: 'u-1002',
     name: 'Driver User',
     email: 'driver@schoolbus.com',
-    password: '$2a$10$7Y4eQ2KOqB4PkM7R9P1yZe8gO2jleFvGX7Q3Qw4C5n7v7xjhf7Rhu',
-    role: 'driver'
+    password: '$2a$10$QnTmjiKcDlBOc6o/iAxC/.84b.Wb7glqH/Kza8Y8T7iSNpUuKBHjm',
+    role: 'driver',
   },
   {
     id: 'u-1003',
     name: 'Parent User',
     email: 'parent@schoolbus.com',
-    password: '$2a$10$7Y4eQ2KOqB4PkM7R9P1yZe8gO2jleFvGX7Q3Qw4C5n7v7xjhf7Rhu',
-    role: 'parent'
-  }
+    password: '$2a$10$QnTmjiKcDlBOc6o/iAxC/.84b.Wb7glqH/Kza8Y8T7iSNpUuKBHjm',
+    role: 'parent',
+  },
+  {
+    id: 'u-1004',
+    name: 'Staff User',
+    email: 'staff@schoolbus.com',
+    password: '$2a$10$QnTmjiKcDlBOc6o/iAxC/.84b.Wb7glqH/Kza8Y8T7iSNpUuKBHjm',
+    role: 'staff',
+  },
 ];
-
-const passwordHash = '$2a$10$7Y4eQ2KOqB4PkM7R9P1yZe8gO2jleFvGX7Q3Qw4C5n7v7xjhf7Rhu';
 
 export const registerUser = async (req, res) => {
   const { name, email, password, role } = req.body;
@@ -34,7 +39,8 @@ export const registerUser = async (req, res) => {
     return res.status(400).json({ message: 'Name, email and password are required' });
   }
 
-  const existingUser = users.find((user) => user.email.toLowerCase() === email.toLowerCase());
+  const normalizedEmail = email.toLowerCase();
+  const existingUser = users.find((user) => user.email.toLowerCase() === normalizedEmail);
   if (existingUser) {
     return res.status(400).json({ message: 'User already exists' });
   }
@@ -42,9 +48,9 @@ export const registerUser = async (req, res) => {
   const user = {
     id: `u-${Date.now()}`,
     name,
-    email,
+    email: normalizedEmail,
     password: await bcrypt.hash(password, 10),
-    role: role || 'parent'
+    role: role || 'parent',
   };
 
   users.push(user);
@@ -57,7 +63,7 @@ export const registerUser = async (req, res) => {
       email: user.email,
       role: user.role,
     },
-    token: generateToken(user)
+    token: generateToken(user),
   });
 };
 
@@ -74,7 +80,7 @@ export const loginUser = async (req, res) => {
   }
 
   const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch && user.password !== passwordHash) {
+  if (!isMatch) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
@@ -86,6 +92,6 @@ export const loginUser = async (req, res) => {
       email: user.email,
       role: user.role,
     },
-    token: generateToken(user)
+    token: generateToken(user),
   });
 };

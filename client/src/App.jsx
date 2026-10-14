@@ -1,10 +1,12 @@
-import { Routes, Route, Link, NavLink, useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Routes, Route, Link, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   Bell,
   Bus,
   CheckCircle2,
   Clock3,
+  LogOut,
   MapPinned,
   ShieldCheck,
   Sparkles,
@@ -16,7 +18,11 @@ import {
   LayoutDashboard,
   UserRound,
   Settings,
+  CircleAlert,
+  School,
 } from 'lucide-react';
+
+const API_URL = 'http://localhost:5000';
 
 const roles = [
   {
@@ -45,32 +51,29 @@ const roles = [
   },
 ];
 
-const stats = [
-  { label: 'Active buses', value: '24', trend: '+12% this week', icon: Bus },
-  { label: 'On-time arrivals', value: '97.4%', trend: 'Excellent service', icon: CheckCircle2 },
-  { label: 'Average ETA', value: '8 min', trend: 'Across city loop', icon: Clock3 },
-  { label: 'Trips today', value: '148', trend: 'Across 6 routes', icon: Gauge },
-];
-
-const routeList = [
-  { stop: 'Green Park', eta: '4 min', status: 'On schedule' },
-  { stop: 'North Gate', eta: '11 min', status: 'Slight delay' },
-  { stop: 'River View', eta: '18 min', status: 'On schedule' },
-];
-
-const notifications = [
-  'Bus 204 is 6 minutes away from pickup point.',
-  'Route A operations were updated due to traffic.',
-  'Driver started the morning trip successfully.',
-];
-
 const appLinks = [
   { to: '/', label: 'Home' },
   { to: '/login', label: 'Login' },
   { to: '/dashboard', label: 'Dashboard' },
 ];
 
-function LandingPage() {
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem('schoolbus-user') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function readStoredToken() {
+  return localStorage.getItem('schoolbus-token') || '';
+}
+
+function formatRole(role) {
+  return role ? role.charAt(0).toUpperCase() + role.slice(1) : 'User';
+}
+
+function LandingPage({ user }) {
   return (
     <div className="min-h-screen text-slate-800">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
@@ -99,11 +102,11 @@ function LandingPage() {
         </nav>
 
         <Link
-          to="/login"
+          to={user ? '/dashboard' : '/login'}
           className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5"
         >
           <LogIn size={16} />
-          Sign in
+          {user ? 'Dashboard' : 'Sign in'}
         </Link>
       </header>
 
@@ -125,17 +128,17 @@ function LandingPage() {
 
             <div className="mt-8 flex flex-wrap gap-4">
               <Link
-                to="/dashboard"
+                to={user ? '/dashboard' : '/login'}
                 className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-soft transition hover:-translate-y-0.5"
               >
-                View dashboard
+                {user ? 'Open dashboard' : 'Login'}
                 <ArrowRight size={18} />
               </Link>
               <Link
                 to="/login"
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-6 py-3.5 font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
-                Login as user
+                View access
               </Link>
             </div>
 
@@ -215,7 +218,51 @@ function LandingPage() {
   );
 }
 
-function LoginPage() {
+function LoginPage({ user, onLogin }) {
+  const navigate = useNavigate();
+  const [isRegister, setIsRegister] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    email: 'parent@schoolbus.com',
+    password: 'password123',
+    role: 'parent',
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) navigate('/dashboard');
+  }, [user, navigate]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Authentication failed');
+      }
+
+      localStorage.setItem('schoolbus-token', data.token);
+      localStorage.setItem('schoolbus-user', JSON.stringify(data.user));
+      onLogin(data);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
       <div className="grid w-full max-w-6xl overflow-hidden rounded-[32px] bg-white shadow-soft lg:grid-cols-2">
@@ -252,45 +299,86 @@ function LoginPage() {
         </div>
 
         <div className="p-8 md:p-10">
-          <div className="mb-8">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">Welcome back</p>
-            <h3 className="mt-2 text-3xl font-black text-slate-900">Login to your account</h3>
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">{isRegister ? 'Create account' : 'Welcome back'}</p>
+              <h3 className="mt-2 text-3xl font-black text-slate-900">{isRegister ? 'Join the platform' : 'Login to your account'}</h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsRegister(!isRegister)}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300"
+            >
+              {isRegister ? 'Login' : 'Register'}
+            </button>
           </div>
 
-          <form className="space-y-5">
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {isRegister && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Full name</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Enter your full name"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white"
+                  required={isRegister}
+                />
+              </div>
+            )}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Email</label>
               <input
                 type="email"
-                defaultValue="parent@schoolbus.com"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white"
+                required
               />
             </div>
+
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Password</label>
               <input
                 type="password"
-                defaultValue="password123"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white"
+                required
               />
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Role</label>
-              <select className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white">
-                <option>Parent</option>
-                <option>Driver</option>
-                <option>Admin</option>
-                <option>Staff</option>
-              </select>
-            </div>
+            {isRegister && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Role</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-blue-500 focus:bg-white"
+                >
+                  <option value="parent">Parent</option>
+                  <option value="driver">Driver</option>
+                  <option value="admin">Admin</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </div>
+            )}
 
-            <Link
-              to="/dashboard"
-              className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3.5 font-semibold text-white shadow-soft transition hover:-translate-y-0.5"
+            {error && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3.5 font-semibold text-white shadow-soft transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Login
-            </Link>
+              {loading ? 'Please wait...' : isRegister ? 'Create account' : 'Login'}
+            </button>
           </form>
         </div>
       </div>
@@ -298,8 +386,89 @@ function LoginPage() {
   );
 }
 
-function DashboardPage() {
-  const location = useLocation();
+function DashboardPage({ user, token, onLogout }) {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [data, setData] = useState({ buses: [], students: [], trips: [], notifications: [] });
+
+  const fetchDashboard = async () => {
+    try {
+      setLoading(true);
+      const responses = await Promise.all([
+        fetch(`${API_URL}/api/buses`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/students`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/trips/active`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/notifications`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+
+      const [busesRes, studentsRes, tripsRes, notificationsRes] = responses;
+
+      if (responses.some((res) => !res.ok)) {
+        throw new Error('Failed to load dashboard data');
+      }
+
+      const busesData = await busesRes.json();
+      const studentsData = await studentsRes.json();
+      const tripsData = await tripsRes.json();
+      const notificationsData = await notificationsRes.json();
+
+      setData({
+        buses: busesData.buses || [],
+        students: studentsData.students || [],
+        trips: tripsData.trips || [],
+        notifications: notificationsData.notifications || [],
+      });
+    } catch (err) {
+      setError(err.message || 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user || !token) {
+      navigate('/login');
+      return;
+    }
+
+    fetchDashboard();
+  }, [user, token, navigate]);
+
+  const roleSummary = useMemo(() => {
+    const defaultStats = [
+      { label: 'Active buses', value: data.buses.length || 0, trend: 'Fleet status', icon: Bus },
+      { label: 'Assigned students', value: data.students.length || 0, trend: 'Active riders', icon: School },
+      { label: 'Trips today', value: data.trips.length || 0, trend: 'On time', icon: Gauge },
+      { label: 'Notifications', value: data.notifications.length || 0, trend: 'Live alerts', icon: Bell },
+    ];
+
+    return defaultStats;
+  }, [data]);
+
+  const tripCards = data.trips.length > 0 ? data.trips : [{ tripId: 'TRIP-000', bus: 'No active trip', status: 'Idle', eta: '--', passengers: 0 }];
+  const studentCards = data.students.length > 0 ? data.students : [{ id: 'N/A', name: 'No rider data', route: 'No route', pickup: 'Pending' }];
+
+  const handleTripAction = async (action) => {
+    try {
+      const response = await fetch(`${API_URL}/api/trips/${action}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'Trip action failed');
+      fetchDashboard();
+      alert(result.message);
+    } catch (err) {
+      setError(err.message || 'Unable to update trip');
+    }
+  };
+
+  if (!user) return <Navigate to="/login" replace />;
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-800 md:px-8">
@@ -314,8 +483,20 @@ function DashboardPage() {
             <div className="rounded-full bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">● Live</div>
             <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
               <UserRound size={16} />
-              Admin
+              {formatRole(user.role)}
             </div>
+            <button
+              onClick={() => {
+                localStorage.removeItem('schoolbus-token');
+                localStorage.removeItem('schoolbus-user');
+                onLogout();
+                navigate('/login');
+              }}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300"
+            >
+              <LogOut size={16} />
+              Logout
+            </button>
           </div>
         </header>
 
@@ -327,99 +508,207 @@ function DashboardPage() {
           ))}
         </nav>
 
-        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          {stats.map(({ label, value, trend, icon: Icon }) => (
-            <div key={label} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
-              <div className="flex items-center justify-between">
-                <div className="rounded-2xl bg-blue-50 p-2 text-blue-600">
-                  <Icon size={20} />
-                </div>
-                <span className="text-xs font-semibold text-emerald-600">{trend}</span>
-              </div>
-              <p className="mt-6 text-sm text-slate-500">{label}</p>
-              <p className="mt-2 text-3xl font-black text-slate-900">{value}</p>
-            </div>
-          ))}
-        </section>
-
-        <section className="mt-8 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-          <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">Live map</p>
-                <h2 className="mt-2 text-xl font-black">Route overview</h2>
-              </div>
-              <div className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">2 alerts</div>
-            </div>
-
-            <div className="h-[360px] rounded-[22px] border border-slate-200 bg-gradient-to-br from-sky-500/10 via-slate-100 to-indigo-500/10 p-4">
-              <div className="relative h-full w-full overflow-hidden rounded-[18px] border border-slate-200 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.12),transparent_35%),linear-gradient(135deg,#dbeafe,#eef2ff_50%,#f8fafc)]">
-                <div className="absolute left-12 top-16 h-3 w-3 rounded-full bg-red-500 shadow-[0_0_16px_rgba(239,68,68,0.9)]" />
-                <div className="absolute left-[38%] top-[48%] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.9)]" />
-                <div className="absolute right-16 bottom-10 h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_18px_rgba(16,185,129,0.8)]" />
-                <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-slate-300" />
-                <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,transparent_49%,rgba(148,163,184,0.4)_50%,transparent_51%,transparent_100%)]" />
-                <div className="absolute inset-0 bg-[linear-gradient(transparent_0%,transparent_49%,rgba(148,163,184,0.4)_50%,transparent_51%,transparent_100%)]" />
-              </div>
+        {error && (
+          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="flex items-center gap-2">
+              <CircleAlert size={16} />
+              {error}
             </div>
           </div>
+        )}
 
-          <div className="space-y-6">
-            <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-xl font-black">Next stops</h3>
-                <RouteIcon size={18} className="text-blue-600" />
-              </div>
-
-              <div className="space-y-4">
-                {routeList.map((item) => (
-                  <div key={item.stop} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3">
-                    <div>
-                      <p className="font-semibold text-slate-800">{item.stop}</p>
-                      <p className="text-xs text-slate-500">{item.status}</p>
+        {loading ? (
+          <div className="rounded-[28px] border border-slate-200 bg-white p-10 text-center text-slate-600 shadow-soft">
+            Loading dashboard data...
+          </div>
+        ) : (
+          <>
+            <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+              {roleSummary.map(({ label, value, trend, icon: Icon }) => (
+                <div key={label} className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-soft">
+                  <div className="flex items-center justify-between">
+                    <div className="rounded-2xl bg-blue-50 p-2 text-blue-600">
+                      <Icon size={20} />
                     </div>
-                    <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">{item.eta}</span>
+                    <span className="text-xs font-semibold text-emerald-600">{trend}</span>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <p className="mt-6 text-sm text-slate-500">{label}</p>
+                  <p className="mt-2 text-3xl font-black text-slate-900">{value}</p>
+                </div>
+              ))}
+            </section>
 
-            <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-xl font-black">Alerts</h3>
-                <Bell size={18} className="text-amber-500" />
-              </div>
-
-              <div className="space-y-3">
-                {notifications.map((item) => (
-                  <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                    {item}
+            <section className="mt-8 grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+              <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600">Live map</p>
+                    <h2 className="mt-2 text-xl font-black">Route overview</h2>
                   </div>
-                ))}
+                  <div className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">{data.notifications.length} alerts</div>
+                </div>
+
+                <div className="h-[360px] rounded-[22px] border border-slate-200 bg-gradient-to-br from-sky-500/10 via-slate-100 to-indigo-500/10 p-4">
+                  <div className="relative h-full w-full overflow-hidden rounded-[18px] border border-slate-200 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.12),transparent_35%),linear-gradient(135deg,#dbeafe,#eef2ff_50%,#f8fafc)]">
+                    <div className="absolute left-12 top-16 h-3 w-3 rounded-full bg-red-500 shadow-[0_0_16px_rgba(239,68,68,0.9)]" />
+                    <div className="absolute left-[38%] top-[48%] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.9)]" />
+                    <div className="absolute right-16 bottom-10 h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_18px_rgba(16,185,129,0.8)]" />
+                    <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-slate-300" />
+                    <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,transparent_49%,rgba(148,163,184,0.4)_50%,transparent_51%,transparent_100%)]" />
+                    <div className="absolute inset-0 bg-[linear-gradient(transparent_0%,transparent_49%,rgba(148,163,184,0.4)_50%,transparent_51%,transparent_100%)]" />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </section>
+
+              <div className="space-y-6">
+                <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-xl font-black">Active trips</h3>
+                    <RouteIcon size={18} className="text-blue-600" />
+                  </div>
+
+                  <div className="space-y-4">
+                    {tripCards.map((trip) => (
+                      <div key={trip.tripId} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3">
+                        <div>
+                          <p className="font-semibold text-slate-800">{trip.bus}</p>
+                          <p className="text-xs text-slate-500">{trip.status}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">{trip.eta}</span>
+                          <p className="mt-1 text-xs text-slate-500">{trip.passengers} riders</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(user.role === 'driver' || user.role === 'admin') && (
+                    <div className="mt-4 flex gap-3">
+                      <button
+                        onClick={() => handleTripAction('start')}
+                        className="flex-1 rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                      >
+                        Start trip
+                      </button>
+                      <button
+                        onClick={() => handleTripAction('stop')}
+                        className="flex-1 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                      >
+                        Stop trip
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-xl font-black">Alerts</h3>
+                    <Bell size={18} className="text-amber-500" />
+                  </div>
+
+                  <div className="space-y-3">
+                    {data.notifications.map((item) => (
+                      <div key={item.id || item.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                        <p className="font-semibold">{item.title}</p>
+                        <p className="mt-1">{item.message}</p>
+                        <p className="mt-2 text-xs text-slate-500">{item.time}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="mt-8 grid gap-6 md:grid-cols-2">
+              <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-xl font-black">Fleet status</h3>
+                  <Bus size={18} className="text-blue-600" />
+                </div>
+
+                <div className="space-y-3">
+                  {data.buses.map((bus) => (
+                    <div key={bus.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3">
+                      <div>
+                        <p className="font-semibold text-slate-800">{bus.id}</p>
+                        <p className="text-xs text-slate-500">{bus.driver}</p>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bus.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
+                        {bus.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-xl font-black">Students</h3>
+                  <Users size={18} className="text-blue-600" />
+                </div>
+
+                <div className="space-y-3">
+                  {studentCards.map((student) => (
+                    <div key={student.id} className="rounded-2xl bg-slate-50 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-slate-800">{student.name}</p>
+                        <span className="text-xs font-semibold text-slate-500">{student.bus || 'Assigned'}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">Route: {student.route}</p>
+                      <p className="text-xs text-slate-500">Pickup: {student.pickup}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function AppLayout() {
-  const location = useLocation();
+function ProtectedRoute({ user, children }) {
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-  return (
-    <div className="min-h-screen">
-      {location.pathname === '/dashboard' ? null : <div />}
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-      </Routes>
-    </div>
-  );
+  return children;
 }
 
 export default function App() {
-  return <AppLayout />;
+  const [user, setUser] = useState(readStoredUser);
+  const [token, setToken] = useState(readStoredToken);
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('schoolbus-user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('schoolbus-user');
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (token) {
+      localStorage.setItem('schoolbus-token', token);
+    } else {
+      localStorage.removeItem('schoolbus-token');
+    }
+  }, [token]);
+
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage user={user} />} />
+      <Route path="/login" element={<LoginPage user={user} onLogin={(data) => { setUser(data.user); setToken(data.token); }} />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute user={user}>
+            <DashboardPage user={user} token={token} onLogout={() => { setUser(null); setToken(''); }} />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }
