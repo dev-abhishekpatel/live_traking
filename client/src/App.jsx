@@ -11,7 +11,7 @@ import {
   Users,
   Gauge,
   LogIn,
-  Route,
+  Route as RouteIcon,
   CarFront,
   LayoutDashboard,
   UserRound,
@@ -368,7 +368,7 @@ function DashboardPage() {
             <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-soft">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-xl font-black">Next stops</h3>
-                <Route size={18} className="text-blue-600" />
+                <RouteIcon size={18} className="text-blue-600" />
               </div>
 
               <div className="space-y-4">
